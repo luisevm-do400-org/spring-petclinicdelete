@@ -1,18 +1,21 @@
-FROM eclipse-temurin:17-jdk-jammy as base
+FROM eclipse-temurin:11-jre
+
 WORKDIR /app
-COPY .mvn/ .mvn
-COPY mvnw pom.xml ./
-RUN ./mvnw dependency:resolve
-COPY src ./src
 
-FROM base as development
-CMD ["./mvnw", "spring-boot:run", "-Dspring-boot.run.profiles=mysql", "-Dspring-boot.run.jvmArguments='-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8000'"]
+# Replace the following variables with your real values
+ENV NEXUS_URL=http://nexus:8081/repository/maven-releases
+ENV GROUP_ID=org.springframework.samples
+ENV ARTIFACT_ID=spring-petclinic
+ENV VERSION=2.7.0
+ENV JAR_NAME=${ARTIFACT_ID}-${VERSION}.jar
 
-FROM base as build
-RUN ./mvnw package
+# Convert group ID to path
+ENV GROUP_PATH=$(echo ${GROUP_ID} | tr '.' '/')
 
+# Download the artifact from Nexus
+RUN apt-get update && apt-get install -y curl && \
+    curl -fSL ${NEXUS_URL}/${GROUP_PATH}/${ARTIFACT_ID}/${VERSION}/${JAR_NAME} -o app.jar && \
+    apt-get remove -y curl && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-FROM eclipse-temurin:17-jre-jammy as production
-EXPOSE 8080
-COPY --from=build /app/target/spring-petclinic-*.jar /spring-petclinic.jar
-CMD ["java", "-Djava.security.egd=file:/dev/./urandom", "-Dspring.profiles.active=mysql", "-jar", "/spring-petclinic.jar"]
+# Run the JAR
+CMD ["java", "-jar", "app.jar"]
